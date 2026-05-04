@@ -2,6 +2,7 @@
 RoboTrader S4 — data_fetcher.py
 Descarga velas de Binance Futures (/fapi/v1/klines).
 Paginación automática, dedup, sort por open_time.
+Fallback multi-endpoint para regiones bloqueadas (451/403).
 """
 import time
 import requests
@@ -11,6 +12,12 @@ from typing import Optional
 
 from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL
 
+_FUTURES_ENDPOINTS = [
+    FUTURES_BASE,
+    "https://fapi1.binance.com",
+    "https://fapi2.binance.com",
+    "https://fapi3.binance.com",
+]
 _BASE = TESTNET_BASE if USE_TESTNET else FUTURES_BASE
 
 _INTERVAL_MAP = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d"}
@@ -32,10 +39,20 @@ def get_klines(symbol: str, interval: str, start_ms: Optional[int] = None,
     params = {"symbol": symbol, "interval": interval, "limit": limit}
     if start_ms: params["startTime"] = start_ms
     if end_ms:   params["endTime"]   = end_ms
-    url = _BASE + "/fapi/v1/klines"
-    r = requests.get(url, params=params, timeout=20)
-    r.raise_for_status()
-    return r.json()
+    endpoints = [TESTNET_BASE] if USE_TESTNET else _FUTURES_ENDPOINTS
+    last_err = None
+    for base in endpoints:
+        try:
+            r = requests.get(base + "/fapi/v1/klines", params=params, timeout=20)
+            if r.status_code in (451, 403):
+                last_err = f"{r.status_code} from {base}"
+                continue
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            last_err = str(e)
+            continue
+    raise RuntimeError(f"Todos los endpoints fallaron: {last_err}")
 
 def klines_to_df(klines: list) -> pd.DataFrame:
     if not klines:
@@ -59,9 +76,7 @@ def get_historical_data(symbol: str = "BTCUSDT", interval: str = INTERVAL,
     Descarga `limit` velas hacia atrás desde `end` (o ahora).
     Devuelve DataFrame ordenado por open_time con tz=UTC.
     """
-    step_ms = _interval_ms(interval) * 1000   # 1000 velas por página
     end_ms  = _to_ms(end) if end else int(datetime.now(timezone.utc).timestamp() * 1000)
-
     frames, fetched = [], 0
     last_end = end_ms
 
