@@ -1,7 +1,7 @@
 """
 RoboTrader S4 — data_fetcher.py
-Bybit Linear Perpetuals (BTCUSDT) — sin restricciones de IP.
-Mismos datos OHLCV que Binance Futures, compatible con el modelo S4.
+OKX BTC-USDT-SWAP — sin restricciones de IP desde cualquier datacenter.
+Precios identicos a Binance Futures (arbitraje <0.1%).
 """
 import time
 import requests
@@ -11,63 +11,61 @@ from typing import Optional
 
 from config import INTERVAL
 
-_BASE = "https://api.bybit.com"
+_BASE = "https://www.okx.com"
+_INST = "BTC-USDT-SWAP"
 
 _INTERVAL_MAP = {
-    "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
-    "1h": "60", "2h": "120", "4h": "240", "6h": "360", "12h": "720",
-    "1d": "D",
+    "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+    "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H", "1d": "1D",
 }
 
-def get_klines(symbol: str, interval: str, limit: int = 200,
-               end_ms: Optional[int] = None) -> list:
-    iv = _INTERVAL_MAP.get(interval)
-    if not iv:
+def get_klines(symbol: str, interval: str, limit: int = 100,
+               after: Optional[int] = None) -> list:
+    bar = _INTERVAL_MAP.get(interval)
+    if not bar:
         raise ValueError(f"Intervalo no soportado: {interval}")
-    params = {
-        "category": "linear",
-        "symbol":   symbol,
-        "interval": iv,
-        "limit":    min(limit, 200),
-    }
-    if end_ms:
-        params["end"] = end_ms
-    r = requests.get(_BASE + "/v5/market/kline", params=params, timeout=20)
+    params = {"instId": _INST, "bar": bar, "limit": min(limit, 100)}
+    if after:
+        params["after"] = after
+    r = requests.get(_BASE + "/api/v5/market/candles",
+                     params=params, timeout=20)
     r.raise_for_status()
     data = r.json()
-    if data.get("retCode") != 0:
-        raise RuntimeError(f"Bybit error: {data.get('retMsg')}")
-    return data["result"]["list"]   # [[ts, open, high, low, close, vol, turnover], ...]
+    if data.get("code") != "0":
+        raise RuntimeError(f"OKX error: {data.get('msg')}")
+    return data["data"]  # [[ts,o,h,l,c,vol,volCcy,volCcyQuote,confirm], ...]
 
 def klines_to_df(klines: list) -> pd.DataFrame:
     if not klines:
         return pd.DataFrame()
     df = pd.DataFrame(klines, columns=[
-        "open_time", "open", "high", "low", "close", "volume", "turnover"
+        "open_time","open","high","low","close",
+        "volume","volCcy","volCcyQuote","confirm"
     ])
-    for c in ["open", "high", "low", "close", "volume"]:
+    for c in ["open","high","low","close","volume"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df["open_time"] = pd.to_datetime(
         pd.to_numeric(df["open_time"]), unit="ms", utc=True
     )
     df["close_time"] = df["open_time"] + pd.Timedelta(hours=1)
     df = df[["open_time","open","high","low","close","volume","close_time"]]
+    # OKX devuelve descendente — invertir
     return df.sort_values("open_time").reset_index(drop=True)
 
 def get_historical_data(symbol: str = "BTCUSDT", interval: str = INTERVAL,
                         limit: int = 300, start=None, end=None,
                         sleep_sec: float = 0.3) -> pd.DataFrame:
     """
-    Descarga las ultimas `limit` velas de Bybit.
-    Bybit devuelve max 200 por llamada — pagina automaticamente.
+    Descarga las ultimas `limit` velas de OKX.
+    OKX devuelve max 100 por llamada — pagina automaticamente.
     """
     frames = []
     remaining = limit
-    end_ms = None
+    after = None
 
     while remaining > 0:
-        batch = min(200, remaining)
-        kl = get_klines(symbol, interval, limit=batch, end_ms=end_ms)
+        batch = min(100, remaining)
+        kl = get_klines(symbol, interval, limit=batch, after=after)
         if not kl:
             break
         df = klines_to_df(kl)
@@ -75,10 +73,10 @@ def get_historical_data(symbol: str = "BTCUSDT", interval: str = INTERVAL,
             break
         frames.append(df)
         remaining -= len(df)
-        if remaining <= 0 or len(df) < batch:
+        if len(df) < batch:
             break
-        # Paginar hacia atras
-        end_ms = int(df["open_time"].iloc[0].timestamp() * 1000) - 1
+        # Paginar: after = timestamp mas antiguo - 1ms
+        after = int(df["open_time"].iloc[0].timestamp() * 1000) - 1
         time.sleep(sleep_sec)
 
     if not frames:
