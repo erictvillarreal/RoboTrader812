@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 
-from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL, API_KEY
+from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL, API_KEY, API_KEY
 
 # Binance bloquea algunas regiones (451). Fallback a endpoints alternativos.
 _FUTURES_ENDPOINTS = [
