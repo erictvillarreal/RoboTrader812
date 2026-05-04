@@ -2,7 +2,6 @@
 RoboTrader S4 — data_fetcher.py
 Descarga velas de Binance Futures (/fapi/v1/klines).
 Paginación automática, dedup, sort por open_time.
-Fallback multi-endpoint para regiones bloqueadas (451/403).
 """
 import time
 import requests
@@ -12,8 +11,9 @@ from typing import Optional
 
 from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL
 
+# Binance bloquea algunas regiones (451). Fallback a endpoints alternativos.
 _FUTURES_ENDPOINTS = [
-    FUTURES_BASE,
+    FUTURES_BASE,           # fapi.binance.com (principal)
     "https://fapi1.binance.com",
     "https://fapi2.binance.com",
     "https://fapi3.binance.com",
@@ -39,20 +39,30 @@ def get_klines(symbol: str, interval: str, start_ms: Optional[int] = None,
     params = {"symbol": symbol, "interval": interval, "limit": limit}
     if start_ms: params["startTime"] = start_ms
     if end_ms:   params["endTime"]   = end_ms
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; RoboTraderS4/1.0)",
+        "Accept":     "application/json",
+    }
     endpoints = [TESTNET_BASE] if USE_TESTNET else _FUTURES_ENDPOINTS
     last_err = None
     for base in endpoints:
         try:
-            r = requests.get(base + "/fapi/v1/klines", params=params, timeout=20)
+            url = base + "/fapi/v1/klines"
+            r = requests.get(url, params=params, headers=headers, timeout=20)
             if r.status_code in (451, 403):
                 last_err = f"{r.status_code} from {base}"
                 continue
             r.raise_for_status()
+            text = r.text.strip()
+            if not text:
+                last_err = f"respuesta vacía de {base}"
+                continue
             return r.json()
         except Exception as e:
             last_err = str(e)
             continue
-    raise RuntimeError(f"Todos los endpoints fallaron: {last_err}")
+    raise RuntimeError(f"Todos los endpoints fallaron. Último error: {last_err}")
 
 def klines_to_df(klines: list) -> pd.DataFrame:
     if not klines:
@@ -73,35 +83,46 @@ def get_historical_data(symbol: str = "BTCUSDT", interval: str = INTERVAL,
                         end: Optional[datetime] = None,
                         sleep_sec: float = 0.25) -> pd.DataFrame:
     """
-    Descarga `limit` velas hacia atrás desde `end` (o ahora).
-    Devuelve DataFrame ordenado por open_time con tz=UTC.
+    Descarga las ultimas `limit` velas. Para el loop de trader.py,
+    limit=300 — se pide en una sola llamada sin startTime/endTime
+    para maxima compatibilidad con Binance en cualquier region.
     """
-    end_ms  = _to_ms(end) if end else int(datetime.now(timezone.utc).timestamp() * 1000)
-    frames, fetched = [], 0
-    last_end = end_ms
+    frames = []
+    remaining = limit
 
-    while fetched < limit:
-        batch = min(1000, limit - fetched)
-        start_ms = last_end - _interval_ms(interval) * batch
-        if start and start_ms < _to_ms(start):
-            start_ms = _to_ms(start)
-
-        kl = get_klines(symbol, interval, start_ms=start_ms,
-                        end_ms=last_end, limit=batch)
+    while remaining > 0:
+        batch = min(1000, remaining)
+        # Sin startTime ni endTime — Binance devuelve las N mas recientes
+        kl = get_klines(symbol, interval, limit=batch)
         if not kl:
             break
-
         df = klines_to_df(kl)
         if df.empty:
             break
-
         frames.append(df)
-        fetched += len(df)
+        remaining -= len(df)
+        # Para limit <= 1000 una sola llamada es suficiente
+        if limit <= 1000:
+            break
+        # Para limit > 1000 paginar hacia atras
         first_open_ms = int(df["open_time"].iloc[0].timestamp() * 1000)
+        end_ms = first_open_ms - 1
         if start and first_open_ms <= _to_ms(start):
             break
-        last_end = first_open_ms - 1
         time.sleep(sleep_sec)
+        # Segunda vuelta: pedir con endTime
+        batch2 = min(1000, remaining)
+        if batch2 <= 0:
+            break
+        kl2 = get_klines(symbol, interval, end_ms=end_ms, limit=batch2)
+        if not kl2:
+            break
+        df2 = klines_to_df(kl2)
+        if df2.empty:
+            break
+        frames.append(df2)
+        remaining -= len(df2)
+        break  # maximo 2 paginas para el loop de trading
 
     if not frames:
         return pd.DataFrame()

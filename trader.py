@@ -216,17 +216,6 @@ def main():
         except Exception as e:
             log.error(f"Error en loop: {e}", exc_info=True)
 
-        # ── Heartbeat Telegram (cada HEARTBEAT_MIN) ─────────
-        now_min = datetime.now(timezone.utc).hour * 60 + datetime.now(timezone.utc).minute
-        if now_min % HEARTBEAT_MIN < 2:   # ventana de 2 min
-            from telegram_notifier import send_daily
-            eq = state["equity"]; pk = state["peak_equity"]
-            pnl_day = eq - state.get("day_open_equity", eq)
-            budget_used = max(0, state.get("day_open_equity",eq) - eq)
-            budget_cap  = state.get("day_open_equity",eq) * 0.005
-            budget_pct  = budget_used/budget_cap*100 if budget_cap > 0 else 0
-            send_daily(eq, pk, state.get("trades_today",0), pnl_day, budget_pct, mode=MODE)
-
         # ── Sleep hasta siguiente cierre de vela ──────────
         sleep_s = _seconds_to_next_close(INTERVAL)
         log.info(f"Próxima vela en {sleep_s:.0f}s ({sleep_s/60:.1f} min)")
