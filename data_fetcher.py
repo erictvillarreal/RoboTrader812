@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 
-from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL
+from config import FUTURES_BASE, TESTNET_BASE, USE_TESTNET, INTERVAL, API_KEY
 
 # Binance bloquea algunas regiones (451). Fallback a endpoints alternativos.
 _FUTURES_ENDPOINTS = [
@@ -41,8 +41,9 @@ def get_klines(symbol: str, interval: str, start_ms: Optional[int] = None,
     if end_ms:   params["endTime"]   = end_ms
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; RoboTraderS4/1.0)",
-        "Accept":     "application/json",
+        "User-Agent":    "Mozilla/5.0 (compatible; RoboTraderS4/1.0)",
+        "Accept":        "application/json",
+        "X-MBX-APIKEY": API_KEY,   # requerido desde IPs de datacenter
     }
     endpoints = [TESTNET_BASE] if USE_TESTNET else _FUTURES_ENDPOINTS
     last_err = None
