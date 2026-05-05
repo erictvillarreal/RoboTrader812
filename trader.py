@@ -25,7 +25,7 @@ import pandas as pd
 
 from config import (
     SYMBOL, INTERVAL, RAW_CSV, FEATURES,
-    COMMISSION, SLIPPAGE, TP_MULT, SL_MULT,
+    COMMISSION, SLIPPAGE, TP_MULT, SL_MULT, LEVERAGE,
 )
 from data_fetcher import get_historical_data
 from tech_signals import add_technical_signals

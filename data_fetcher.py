@@ -49,7 +49,9 @@ def klines_to_df(klines: list) -> pd.DataFrame:
     )
     df["close_time"] = df["open_time"] + pd.Timedelta(hours=1)
     df = df[["open_time","open","high","low","close","volume","close_time"]]
-    # OKX devuelve descendente — invertir
+    # Filtrar solo velas confirmadas (confirm=1) y ordenar
+    if "confirm" in df.columns:
+        df = df[df["confirm"].astype(str) == "1"]
     return df.sort_values("open_time").reset_index(drop=True)
 
 def get_historical_data(symbol: str = "BTCUSDT", interval: str = INTERVAL,
