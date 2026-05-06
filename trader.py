@@ -151,6 +151,13 @@ def main():
                 log.warning(f"KILL SWITCH activado — MDD={mdd*100:.2f}%")
 
             # ── Policy decision ───────────────────────────
+            # DEBUG TEMPORAL
+            import numpy as np
+            from config import FEATURES
+            log.info(f"DEBUG row keys: {list(row.keys())[:8]}")
+            log.info(f"DEBUG close={row.get('close','MISSING')} atr={row.get('atr','MISSING')}")
+            feat_vals = {f: row.get(f, 'MISSING') for f in FEATURES}
+            log.info(f"DEBUG features: {feat_vals}")
             d = decide(row, state, atr_history)
             log.info(
                 f"Vela {row.get('open_time','?')} | "
