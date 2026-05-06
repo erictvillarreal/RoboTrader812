@@ -74,9 +74,8 @@ def send_trade(symbol: str, direction: str, entry: float,
                tp: float, sl: float, ev: float, p_up: float,
                stake_usdt: float, equity: float, mode: str = "paper"):
     """S4 TRADE — se envía en cada apertura de posición."""
-    emoji = "🟢" if direction == "long" else "🔴"
     text = (
-        f"<b>S4 TRADE {emoji}</b> [{mode.upper()}]\n"
+        f"<b>S4 TRADE</b> [{mode.upper()}]\n"
         f"Symbol:    <code>{symbol}</code>\n"
         f"Direction: <code>{direction.upper()}</code>\n"
         f"Entry:     <code>${entry:,.2f}</code>\n"
@@ -95,7 +94,7 @@ def send_daily(equity: float, peak: float, trades_today: int,
     """S4 DAILY — heartbeat al cambio de día UTC."""
     mdd_from_peak = (equity / peak - 1) * 100 if peak > 0 else 0
     text = (
-        f"<b>S4 DAILY ☀️</b> [{mode.upper()}]\n"
+        f"<b>S4 DAILY</b> [{mode.upper()}]\n"
         f"Equity:      <code>${equity:,.2f}</code>\n"
         f"Peak:        <code>${peak:,.2f}</code>\n"
         f"MDD vs peak: <code>{mdd_from_peak:.2f}%</code>\n"
@@ -110,7 +109,7 @@ def send_risk(event: str, equity: float, peak: float,
               detail: str = "", mode: str = "paper"):
     """S4 RISK — presupuesto agotado o kill-switch."""
     text = (
-        f"<b>⚠️ S4 RISK</b> [{mode.upper()}]\n"
+        f"<b>S4 RISK</b> [{mode.upper()}]\n"
         f"Event:  <code>{event}</code>\n"
         f"Equity: <code>${equity:,.2f}</code>\n"
         f"Peak:   <code>${peak:,.2f}</code>\n"
@@ -126,7 +125,7 @@ def send_weekly(equity: float, equity_start_week: float, trades_week: int,
     pnl = equity - equity_start_week
     ret = pnl / equity_start_week * 100 if equity_start_week > 0 else 0
     text = (
-        f"<b>S4 WEEKLY 📊</b> [{mode.upper()}]\n"
+        f"<b>S4 WEEKLY</b> [{mode.upper()}]\n"
         f"Equity:      <code>${equity:,.2f}</code>\n"
         f"PnL semana:  <code>${pnl:+,.2f} ({ret:+.2f}%)</code>\n"
         f"Trades:      <code>{trades_week}</code>\n"
@@ -139,7 +138,7 @@ def send_weekly(equity: float, equity_start_week: float, trades_week: int,
 def send_startup(equity: float, mode: str = "paper"):
     """Notificación de arranque del bot."""
     text = (
-        f"<b>S4 START 🚀</b> [{mode.upper()}]\n"
+        f"<b>S4 START</b> [{mode.upper()}]\n"
         f"Equity inicial: <code>${equity:,.2f}</code>\n"
         f"<i>{_now_utc()}</i>"
     )
