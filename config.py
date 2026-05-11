@@ -63,7 +63,7 @@ VOL_CUT_FACTOR  = 0.75
 # Filtros EV
 EV_MIN_PERC_STAKE  = 0.003
 PROB_EDGE_MIN      = 0.04
-EV_GAP_PERC        = 0.0000  # desactivado — EV_MIN_PERC_STAKE ya cubre este filtro
+EV_GAP_PERC        = 0.0005
 DAILY_EV_QUANTILE  = 0.20
 MIN_OBS_FOR_Q      = 6
 
