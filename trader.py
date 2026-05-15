@@ -25,7 +25,7 @@ import pandas as pd
 
 from config import (
     SYMBOL, INTERVAL, RAW_CSV, FEATURES,
-    COMMISSION, SLIPPAGE, TP_MULT, SL_MULT, LEVERAGE,
+    COMMISSION, SLIPPAGE, TP_MULT, SL_MULT,
 )
 from data_fetcher import get_historical_data
 from tech_signals import add_technical_signals
@@ -161,55 +161,125 @@ def main():
             if d.take:
                 close = float(row["close"])
                 atr   = float(row["atr"])
-                fees  = d.stake * LEVERAGE * (COMMISSION + SLIPPAGE) * 2
+                notional = d.stake * LEVERAGE
+                fees     = notional * (COMMISSION + SLIPPAGE) * 2
+                qty      = notional / close
 
                 # ── Ejecutar ──────────────────────────────
                 if d.direction == "long":
                     result = open_long(
-                        SYMBOL, d.stake, d.tp_price, d.sl_price, paper=PAPER
+                        SYMBOL, d.stake, d.tp_price, d.sl_price,
+                        paper=PAPER, mock_price=close
                     )
                 else:
                     result = open_short(
-                        SYMBOL, d.stake, d.tp_price, d.sl_price, paper=PAPER
+                        SYMBOL, d.stake, d.tp_price, d.sl_price,
+                        paper=PAPER, mock_price=close
                     )
 
-                # En paper: simular PnL esperado (EV neto)
-                pnl_sim = d.ev - fees if PAPER else 0.0
+                if PAPER:
+                    # ── Simular cierre real esperando la siguiente vela ──
+                    # Dormimos hasta que cierre la próxima vela, luego
+                    # descargamos esa vela y determinamos outcome real
+                    log.info(
+                        f"TRADE ABIERTO {d.direction.upper()} | "
+                        f"entry={close:.2f} tp={d.tp_price:.2f} "
+                        f"sl={d.sl_price:.2f} stake={d.stake:.2f}"
+                    )
+                    # Notificar apertura
+                    send_trade(
+                        SYMBOL, d.direction, close,
+                        d.tp_price, d.sl_price,
+                        d.ev, d.p_up, d.stake, state["equity"], mode=MODE,
+                    )
 
-                new_equity = state["equity"] + (pnl_sim if PAPER else 0.0)
-                new_equity = max(new_equity, 0.01)
+                    # Esperar cierre de vela (ya dormirá el loop principal)
+                    # Guardar trade pendiente en estado para resolverlo
+                    state["pending_trade"] = {
+                        "direction": d.direction,
+                        "entry":     close,
+                        "tp_price":  d.tp_price,
+                        "sl_price":  d.sl_price,
+                        "stake":     d.stake,
+                        "notional":  notional,
+                        "fees":      fees,
+                        "qty":       qty,
+                        "p_up":      d.p_up,
+                        "ev":        d.ev,
+                        "eq_before": state["equity"],
+                    }
+                    state["trades_today"] = state.get("trades_today", 0) + 1
+                    state.setdefault("daily_evs", []).append(d.ev)
+                    save_state(state)
 
-                # Actualizar estado
-                state["equity"]       = new_equity
-                state["peak_equity"]  = max(state["peak_equity"], new_equity)
-                state["trades_today"] = state.get("trades_today", 0) + 1
-                state.setdefault("daily_evs", []).append(d.ev)
-                save_state(state)
+                else:
+                    # Live: el exchange maneja el cierre vía TP/SL orders
+                    state["trades_today"] = state.get("trades_today", 0) + 1
+                    state.setdefault("daily_evs", []).append(d.ev)
+                    save_state(state)
+                    log.info(
+                        f"TRADE LIVE {d.direction.upper()} | "
+                        f"entry={close:.2f} tp={d.tp_price:.2f} "
+                        f"sl={d.sl_price:.2f} stake={d.stake:.2f}"
+                    )
 
-                # Ledger
-                qty = d.stake * LEVERAGE / close
-                log_trade(
-                    SYMBOL, d.direction, close,
-                    d.tp_price, d.sl_price, d.stake, qty,
-                    d.p_up, d.ev, 1.0,
-                    state["equity"] - pnl_sim, new_equity,
-                    pnl_sim, fees,
-                    outcome="paper" if PAPER else "open",
-                    mode=MODE,
-                )
+            # ── Resolver trade pendiente del ciclo anterior ──────
+            pending = state.get("pending_trade")
+            if pending and PAPER:
+                # Verificar si TP o SL fue tocado en la vela actual
+                high  = float(row.get("high", row["close"]))
+                low   = float(row.get("low",  row["close"]))
+                direction = pending["direction"]
+                tp = pending["tp_price"]
+                sl = pending["sl_price"]
 
-                # Telegram
-                send_trade(
-                    SYMBOL, d.direction, close,
-                    d.tp_price, d.sl_price,
-                    d.ev, d.p_up, d.stake, new_equity, mode=MODE,
-                )
+                if direction == "long":
+                    tp_hit = high >= tp
+                    sl_hit = low  <= sl
+                else:
+                    tp_hit = low  <= tp
+                    sl_hit = high >= sl
 
-                log.info(
-                    f"TRADE {d.direction.upper()} | stake={d.stake:.2f} "
-                    f"tp={d.tp_price:.2f} sl={d.sl_price:.2f} "
-                    f"equity={new_equity:.2f}"
-                )
+                if tp_hit or sl_hit:
+                    outcome = "tp" if tp_hit else "sl"
+                    entry   = pending["entry"]
+                    notional_p = pending["notional"]
+                    fees_p     = pending["fees"]
+
+                    if outcome == "tp":
+                        if direction == "long":
+                            gross = notional_p * (tp - entry) / entry
+                        else:
+                            gross = notional_p * (entry - tp) / entry
+                    else:
+                        if direction == "long":
+                            gross = -notional_p * (entry - sl) / entry
+                        else:
+                            gross = -notional_p * (sl - entry) / entry
+
+                    pnl_real   = gross - fees_p
+                    eq_before  = pending["eq_before"]
+                    new_equity = max(eq_before + pnl_real, 0.01)
+
+                    state["equity"]      = new_equity
+                    state["peak_equity"] = max(state["peak_equity"], new_equity)
+                    state.pop("pending_trade", None)
+                    save_state(state)
+
+                    log_trade(
+                        SYMBOL, direction, entry,
+                        tp, sl, pending["stake"], pending["qty"],
+                        pending["p_up"], pending["ev"], 1.0,
+                        eq_before, new_equity,
+                        pnl_real, fees_p,
+                        outcome=outcome, mode=MODE,
+                    )
+
+                    log.info(
+                        f"TRADE CERRADO {outcome.upper()} | "
+                        f"pnl={pnl_real:+.4f} equity={new_equity:.4f}"
+                    )
+                # Si no se tocó TP ni SL: sigue abierto, se resuelve en el siguiente ciclo
 
         except KeyboardInterrupt:
             break
