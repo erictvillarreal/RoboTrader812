@@ -89,6 +89,24 @@ def send_trade(symbol: str, direction: str, entry: float,
     )
     return _send(text, deduplicate=True)
 
+def send_trade_closed(symbol: str, direction: str, entry: float,
+                      tp: float, sl: float, outcome: str,
+                      pnl_real: float, equity: float, mode: str = "paper"):
+    """S4 CLOSE — se envia cuando cierra la posicion con PnL real."""
+    win = outcome == "tp"
+    result_tag = "WIN" if win else "LOSS"
+    text = (
+        f"<b>S4 CLOSE [{result_tag}]</b> [{mode.upper()}]\n"
+        f"Symbol:    <code>{symbol}</code>\n"
+        f"Direction: <code>{direction.upper()}</code>\n"
+        f"Entry:     <code>${entry:,.2f}</code>\n"
+        f"Exit via:  <code>{outcome.upper()}</code> (${tp:,.2f if outcome == 'tp' else sl:,.2f})\n"
+        f"PnL real:  <code>${pnl_real:+.4f}</code>\n"
+        f"Equity:    <code>${equity:,.4f}</code>\n"
+        f"<i>{_now_utc()}</i>"
+    )
+    return _send(text, deduplicate=False)
+
 def send_daily(equity: float, peak: float, trades_today: int,
                daily_pnl: float, budget_used_pct: float, mode: str = "paper"):
     """S4 DAILY — heartbeat al cambio de día UTC."""

@@ -36,7 +36,7 @@ from futures_broker import (
     get_balance, get_mark_price,
 )
 from telegram_notifier import (
-    send_startup, send_trade, send_daily, send_risk,
+    send_startup, send_trade, send_trade_closed, send_daily, send_risk,
 )
 from trade_logger import log_trade
 
@@ -275,6 +275,11 @@ def main():
                         outcome=outcome, mode=MODE,
                     )
 
+                    send_trade_closed(
+                        SYMBOL, direction, pending["entry"],
+                        pending["tp_price"], pending["sl_price"],
+                        outcome, pnl_real, new_equity, mode=MODE,
+                    )
                     log.info(
                         f"TRADE CERRADO {outcome.upper()} | "
                         f"pnl={pnl_real:+.4f} equity={new_equity:.4f}"
