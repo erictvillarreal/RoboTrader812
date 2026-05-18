@@ -167,22 +167,22 @@ def decide(row: dict, state: dict, atr_history: list) -> Decision:
     # PROB_EDGE: diferencia mínima sobre 0.5
     prob_edge = abs(p_up - 0.5)
     if prob_edge < PROB_EDGE_MIN:
-        return Decision(False, "none", 0, 0, 0, p_up, ev, "prob_edge_low")
+        return Decision(False, "none", 0, 0, 0, ev, p_up, "prob_edge_low")
 
     # EV_MIN_PERC_STAKE
     ev_perc = ev / (equity * POSITION_FRAC + 1e-12)
     if ev_perc < EV_MIN_PERC_STAKE * EV_CUSHION_MULT:
-        return Decision(False, "none", 0, 0, 0, p_up, ev, "ev_min_perc_low")
+        return Decision(False, "none", 0, 0, 0, ev, p_up, "ev_min_perc_low")
 
     # EV_GAP (EV vs costo puro)
     cost_only = (COMMISSION + SLIPPAGE) * close * 2
     if ev < cost_only * (1 + EV_GAP_PERC):
-        return Decision(False, "none", 0, 0, 0, p_up, ev, "ev_gap_low")
+        return Decision(False, "none", 0, 0, 0, ev, p_up, "ev_gap_low")
 
     # Daily EV quantile (causal)
     daily_evs = state.get("daily_evs", [])
     if not _ev_quantile_ok(ev, daily_evs):
-        return Decision(False, "none", 0, 0, 0, p_up, ev, "daily_ev_quantile")
+        return Decision(False, "none", 0, 0, 0, ev, p_up, "daily_ev_quantile")
 
     # ── Sizing por volatilidad ────────────────────────────
     scale    = _vol_scale(atr, close, atr_history)
