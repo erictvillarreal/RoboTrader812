@@ -5,7 +5,7 @@ __pycache__/
 *.pyd
 model/*.pkl
 var/state.json
-logs/notif_dedup.json
+# logs/  <- ahora se guarda en reponotif_dedup.json
 .DS_Store
 *.egg-info/
 dist/

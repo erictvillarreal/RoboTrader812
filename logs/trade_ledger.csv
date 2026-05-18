@@ -1,0 +1,5 @@
+ts,symbol,direction,entry_price,tp_price,sl_price,stake_usdt,qty,p_up,ev,equity_before,equity_after,pnl_simulated,fees,outcome,mode,reason
+2026-05-14T18:00:00+00:00,BTCUSDT,short,81621.2,80787.33,82261.21,39.0,0.001,0.445,200.22,1000.0,1000.61,0.61,0.187,tp,paper,ok
+2026-05-14T19:00:00+00:00,BTCUSDT,short,81541.7,80787.33,82261.21,46.8,0.001,0.445,200.22,1000.61,1001.25,0.64,0.225,tp,paper,ok
+2026-05-15T15:00:00+00:00,BTCUSDT,short,79132.0,77661.67,79536.0,39.0,0.001,0.432,180.0,1001.25,1000.87,-0.38,0.187,sl,paper,ok
+2026-05-15T16:00:00+00:00,BTCUSDT,short,79115.18,78044.63,79536.29,46.8,0.001,0.432,180.0,1000.87,1000.34,-0.53,0.225,sl,paper,ok
